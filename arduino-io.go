@@ -57,17 +57,49 @@ func (a *ArduinoIoBoard) Open() (err error) {
 	}
 
 	if err = a.serial.Open(); nil == err {
-		s, _ := a.read()
-		d := json.NewDecoder(strings.NewReader(s))
-		var status ArduinoBoardStatus
-		d.Decode(&status)
+		a.read()
+		/*
+			s, _ := a.read()
+			d := json.NewDecoder(strings.NewReader(s))
+			var status ArduinoBoardStatus
+			d.Decode(&status)
 
-		fmt.Printf("got: '%s'\n\n%#v\n", s, status)
+			fmt.Printf("got: '%s'\n\n%#v\n", s, status)
+		*/
+	} else {
+		fmt.Printf("err %#v\n", err)
 	}
 
-	fmt.Printf("err %#v\n", err)
-
 	return err
+}
+
+func (a *ArduinoIoBoard) Help() (rv string, err error) {
+	if nil != a.serial {
+		b := []byte{'s', ' ', '0', '\n', '\n'}
+		a.serial.Write(b)
+		rv, err = a.read()
+		if nil == err {
+			fmt.Printf("%s\n", rv)
+		}
+	}
+
+	for {
+		rv, err = a.read()
+		if nil == err {
+			//fmt.Printf("%s\n", rv)
+			d := json.NewDecoder(strings.NewReader(rv))
+			var status ArduinoBoardStatus
+			if nil == d.Decode(&status) {
+				fmt.Printf("%d - Out: %d - 5: %d:%d - 6: %d:%d - 7: %d:%d\n", status.UpTime, status.RelayState,
+					status.Inputs["5"].State, status.Inputs["5"].PulseCount,
+					status.Inputs["6"].State, status.Inputs["6"].PulseCount,
+					status.Inputs["7"].State, status.Inputs["7"].PulseCount)
+				//fmt.Printf("got: %#v\n", status)
+			}
+		}
+	}
+
+	return rv, err
 }
 
 func (a *ArduinoIoBoard) read() (rv string, err error) {

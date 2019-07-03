@@ -11,5 +11,5 @@ func main() {
 	name, _ := FindArduino()
 	a := &ArduinoIoBoard{Name: name}
 	a.Open()
-
+	a.Help()
 }
