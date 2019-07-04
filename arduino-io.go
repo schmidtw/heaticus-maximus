@@ -93,15 +93,15 @@ func (a *ArduinoIoBoard) Close() {
 }
 
 func (a *ArduinoIoBoard) run() {
-	var status ArduinoBoardStatus
 
 	for {
 		s, err := a.read()
 		if nil != err {
+			var status ArduinoBoardStatus
 			d := json.NewDecoder(strings.NewReader(s))
 			if nil == d.Decode(&status) {
 				if nil != a.Update {
-					a.Update(&status)
+					go a.Update(&status)
 				}
 			}
 		}
