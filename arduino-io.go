@@ -5,27 +5,33 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/schmidtw/go-serial"
 )
 
-func FindArduino() (string, error) {
-	list, err := serial.FindSerialPorts()
+// FindArduinos looks at the list of serial ports present and returns the list
+// of all of them that are Arduinos.
+func FindArduinos() (list []string, err error) {
+	all, err := serial.FindSerialPorts()
 	if nil == err {
-		for _, v := range list {
+		for _, v := range all {
 			if rv, _ := regexp.MatchString(".*Arduino.*", v); true == rv {
-				fmt.Printf("Found\n")
-				return v, err
+				list = append(list, v)
 			}
 		}
 	}
-	return "", err
+	return list, err
 }
 
+//
 type ArduinoIoBoard struct {
-	Name         string
-	SerialNumber string
-	serial       *serial.Serial
+	Filename string
+	Update   func(*ArduinoBoardStatus)
+
+	serial *serial.Serial
+	quit   chan int
+	wg     sync.WaitGroup
 }
 
 type ArduinoBoardInputStatus struct {
@@ -44,11 +50,11 @@ type ArduinoBoardStatus struct {
 
 func (a *ArduinoIoBoard) Open() (err error) {
 	if nil != a.serial {
-		return fmt.Errorf("Arduino '%s' already open.", a.Name)
+		return fmt.Errorf("Arduino '%s' already open.", a.Filename)
 	}
 
 	a.serial = &serial.Serial{
-		Name:      a.Name,
+		Name:      a.Filename,
 		Baud:      115200,
 		Config:    "8N1",
 		Canonical: false,
@@ -56,20 +62,75 @@ func (a *ArduinoIoBoard) Open() (err error) {
 		Vtime:     1,
 	}
 
-	if err = a.serial.Open(); nil == err {
-		a.read()
-		/*
-			s, _ := a.read()
-			d := json.NewDecoder(strings.NewReader(s))
-			var status ArduinoBoardStatus
-			d.Decode(&status)
+	err = a.serial.Open()
 
-			fmt.Printf("got: '%s'\n\n%#v\n", s, status)
-		*/
-	} else {
-		fmt.Printf("err %#v\n", err)
+	if nil == err {
+		a.wg.Add(1)
+		go a.run()
+	}
+	/*
+			a.read()
+
+				s, _ := a.read()
+				d := json.NewDecoder(strings.NewReader(s))
+				var status ArduinoBoardStatus
+				d.Decode(&status)
+
+				fmt.Printf("got: '%s'\n\n%#v\n", s, status)
+		} else {
+			fmt.Printf("err %#v\n", err)
+		}
+	*/
+
+	return err
+}
+
+func (a *ArduinoIoBoard) Close() {
+	if nil != a.serial {
+		a.quit <- 0
+		a.wg.Wait()
+	}
+}
+
+func (a *ArduinoIoBoard) run() {
+	var status ArduinoBoardStatus
+
+	for {
+		s, err := a.read()
+		if nil != err {
+			d := json.NewDecoder(strings.NewReader(s))
+			if nil == d.Decode(&status) {
+				if nil != a.Update {
+					a.Update(&status)
+				}
+			}
+		}
+
+		select {
+		case <-a.quit:
+			break
+		}
 	}
 
+	a.serial.Close()
+	a.wg.Done()
+}
+
+func (a *ArduinoIoBoard) SetRelayState(state int) (err error) {
+	if nil == a.serial {
+		return fmt.Errorf("Arduino '%s' not open.", a.Filename)
+	}
+
+	s := fmt.Sprintf("s %d\n", state)
+	b := []byte(s)
+	for left := len(b); 0 < left; {
+		tmp, err := a.serial.Write(b)
+		if nil != err {
+			return err
+		}
+		b = b[tmp:]
+		left = len(b)
+	}
 	return err
 }
 
@@ -119,66 +180,3 @@ func (a *ArduinoIoBoard) read() (rv string, err error) {
 
 	return rv, err
 }
-
-/*
-	if _, err := os.Stat("/dev/serial"); nil == err {
-		if _, err := os.Stat("/dev/serial/by-id"); nil == err {
-		}
-	}
-*/
-
-/*
-	s := &serial.Serial{Name: "/dev/ttyACM0"}
-	s.Open()
-	s.SetBaud(119200, "8N1")
-	b := make([]byte, 1000)
-	n, _ := s.Read(b)
-	fmt.Printf("%d - %s\n", n, string(b[:n]))
-	for {
-		n, _ = s.Read(b)
-		fmt.Printf("%d - %s\n", n, string(b[:n]))
-	}
-	s.Close()
-			fmt.Printf("%d - %s\n", n, string(b[:n]))
-
-		ports, err := serial.GetPortsList()
-		if err != nil {
-			fmt.Println(err)
-		}
-		if len(ports) == 0 {
-			fmt.Println("No serial ports found!")
-		}
-		for _, port := range ports {
-			fmt.Printf("Found port: %v\n", port)
-		}
-
-		mode := &serial.Mode{
-			BaudRate: 115200,
-			Parity:   serial.NoParity,
-			DataBits: 8,
-			StopBits: serial.OneStopBit,
-		}
-		port, err := serial.Open("/dev/ttyACM0", mode)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		err = port.SetMode(mode)
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		buff := make([]byte, 100)
-		for {
-			n, err := port.Read(buff)
-			if err != nil {
-				fmt.Println(err)
-				break
-			}
-			if n == 0 {
-				fmt.Println("\nEOF")
-				break
-			}
-			fmt.Printf("%v", string(buff[:n]))
-		}
-*/

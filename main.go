@@ -8,8 +8,8 @@ func main() {
 
 	fmt.Printf("Hi\n")
 
-	name, _ := FindArduino()
-	a := &ArduinoIoBoard{Name: name}
+	names, _ := FindArduinos()
+	a := &ArduinoIoBoard{Filename: names[0]}
 	a.Open()
 	a.Help()
 }
