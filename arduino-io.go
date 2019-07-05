@@ -30,7 +30,7 @@ type ArduinoIoBoard struct {
 	Update   func(*ArduinoBoardStatus)
 
 	serial *serial.Serial
-	quit   chan int
+	done   chan bool
 	wg     sync.WaitGroup
 }
 
@@ -87,33 +87,38 @@ func (a *ArduinoIoBoard) Open() (err error) {
 
 func (a *ArduinoIoBoard) Close() {
 	if nil != a.serial {
-		a.quit <- 0
+		a.done <- true
 		a.wg.Wait()
 	}
 }
 
 func (a *ArduinoIoBoard) run() {
 
+	defer a.serial.Close()
+	defer a.wg.Done()
+
 	for {
 		s, err := a.read()
-		if nil != err {
+		//fmt.Printf("got: '%s'\n", s )
+		if nil == err {
+		//fmt.Printf("no error: '%s'\n", s )
 			var status ArduinoBoardStatus
 			d := json.NewDecoder(strings.NewReader(s))
 			if nil == d.Decode(&status) {
+				//fmt.Printf( "Decoding is ok\n")
 				if nil != a.Update {
+					//fmt.Printf( "Calling Update\n")
 					go a.Update(&status)
 				}
 			}
 		}
 
 		select {
-		case <-a.quit:
-			break
+		case <-a.done:
+			return
+		default:
 		}
 	}
-
-	a.serial.Close()
-	a.wg.Done()
 }
 
 func (a *ArduinoIoBoard) SetRelayState(state int) (err error) {

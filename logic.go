@@ -15,7 +15,7 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -37,7 +37,8 @@ type Logic struct {
 
 	last *ArduinoBoardStatus
 
-	heatLoopStopTicker *time.Ticker
+	heaterLoopUntil time.Time
+	ticker *time.Ticker
 	done               chan bool
 	wg                 sync.WaitGroup
 	mutex              sync.Mutex
@@ -45,6 +46,8 @@ type Logic struct {
 
 func (l *Logic) Start() (err error) {
 	l.Arduino.Update = l.Update
+
+	l.ticker = time.NewTicker(time.Second)
 
 	err = l.Arduino.Open()
 	if nil == err {
@@ -61,30 +64,35 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
+	fmt.Printf( "Update!\n" )
 	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	if nil != l.last {
 	last := l.last
 	if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
 		/* Cold water has increased 0.1G */
+	fmt.Printf( "Cold++\n" )
 
 		/* Make hot water because we think we'll need it. */
 		l.heaterLoopPump = true
-		l.heatLoopStopTicker.Stop()
-		l.heatLoopStopTicker = time.NewTicker(time.Second * 5)
+		l.heaterLoopUntil = time.Now().Add(time.Second*30)
 	}
 	if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
 		/* Hot water has increased 0.1G */
+	fmt.Printf( "Hot++\n" )
 
 		/* Make hot water because we know we need it. */
 		l.heaterLoopPump = true
-		l.heatLoopStopTicker.Stop()
-		l.heatLoopStopTicker = time.NewTicker(time.Second * 5)
+		l.heaterLoopUntil = time.Now().Add(time.Second*30)
 	}
 	if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
 		/* Heater Loop has increased 0.1G */
+	fmt.Printf( "Heater++\n" )
 	}
 	l.pushRelayState()
+}
 	l.last = s
-	l.mutex.Unlock()
 }
 
 func (l *Logic) pushRelayState() {
@@ -109,6 +117,7 @@ func (l *Logic) getRelayState() (rv int) {
 		rv |= 32
 	}
 
+	fmt.Printf( "Setting: 0x%02x\n", rv )
 	return rv
 }
 
@@ -116,13 +125,16 @@ func (l *Logic) run() {
 	for {
 		select {
 		case <-l.done:
-			l.heatLoopStopTicker.Stop()
+			fmt.Printf("Done!\n")
+			l.ticker.Stop()
 			return
-		case <-l.heatLoopStopTicker.C:
+		case <-l.ticker.C:
 			l.mutex.Lock()
-			l.heaterLoopPump = false
-			l.heatLoopStopTicker.Stop()
-			l.pushRelayState()
+			if time.Now().After(l.heaterLoopUntil) {
+				fmt.Printf("Stop Heater!\n")
+				l.heaterLoopPump = false
+				l.pushRelayState()
+			}
 			l.mutex.Unlock()
 		}
 	}
