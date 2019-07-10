@@ -38,10 +38,10 @@ type Logic struct {
 	last *ArduinoBoardStatus
 
 	heaterLoopUntil time.Time
-	ticker *time.Ticker
-	done               chan bool
-	wg                 sync.WaitGroup
-	mutex              sync.Mutex
+	ticker          *time.Ticker
+	done            chan bool
+	wg              sync.WaitGroup
+	mutex           sync.Mutex
 }
 
 func (l *Logic) Start() (err error) {
@@ -64,34 +64,34 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
-	fmt.Printf( "Update!\n" )
+	fmt.Printf("Update!\n")
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
 	if nil != l.last {
-	last := l.last
-	if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
-		/* Cold water has increased 0.1G */
-	fmt.Printf( "Cold++\n" )
+		last := l.last
+		if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
+			/* Cold water has increased 0.1G */
+			fmt.Printf("Cold++\n")
 
-		/* Make hot water because we think we'll need it. */
-		l.heaterLoopPump = true
-		l.heaterLoopUntil = time.Now().Add(time.Second*30)
-	}
-	if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
-		/* Hot water has increased 0.1G */
-	fmt.Printf( "Hot++\n" )
+			/* Make hot water because we think we'll need it. */
+			l.heaterLoopPump = true
+			l.heaterLoopUntil = time.Now().Add(time.Second * 30)
+		}
+		if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
+			/* Hot water has increased 0.1G */
+			fmt.Printf("Hot++\n")
 
-		/* Make hot water because we know we need it. */
-		l.heaterLoopPump = true
-		l.heaterLoopUntil = time.Now().Add(time.Second*30)
+			/* Make hot water because we know we need it. */
+			l.heaterLoopPump = true
+			l.heaterLoopUntil = time.Now().Add(time.Second * 30)
+		}
+		if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
+			/* Heater Loop has increased 0.1G */
+			fmt.Printf("Heater++\n")
+		}
+		l.pushRelayState()
 	}
-	if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
-		/* Heater Loop has increased 0.1G */
-	fmt.Printf( "Heater++\n" )
-	}
-	l.pushRelayState()
-}
 	l.last = s
 }
 
@@ -117,7 +117,7 @@ func (l *Logic) getRelayState() (rv int) {
 		rv |= 32
 	}
 
-	fmt.Printf( "Setting: 0x%02x\n", rv )
+	fmt.Printf("Setting: 0x%02x\n", rv)
 	return rv
 }
 
