@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -27,7 +30,7 @@ const (
 )
 
 type Logic struct {
-	Arduino *ArduinoIoBoard
+	arduino *ArduinoIoBoard
 
 	wholeHouseFan      bool
 	heaterLoopPump     bool
@@ -38,29 +41,82 @@ type Logic struct {
 	last *ArduinoBoardStatus
 
 	heaterLoopUntil time.Time
+	recircUntil     time.Time
+	recircBlock     time.Time
+	fanUntil        time.Time
 	ticker          *time.Ticker
 	done            chan bool
 	wg              sync.WaitGroup
 	mutex           sync.Mutex
+
+	// Metrics
+	whFanGauge  prometheus.Gauge
+	whFanOnTime prometheus.Counter
+}
+
+func NewLogic(arduino *ArduinoIoBoard) *Logic {
+	l := &Logic{
+		arduino: arduino,
+		done:    make(chan bool),
+		whFanGauge: promauto.NewGauge(prometheus.GaugeOpts{
+			Subsystem: "physical",
+			Name:      "wholehouse_fan_state",
+			Help:      "Wholehouse fan state (off=0, on=1) at the moment.",
+		}),
+		whFanOnTime: promauto.NewCounter(prometheus.CounterOpts{
+			Subsystem: "physical",
+			Name:      "wholehouse_fan_on_time",
+			Help:      "Wholehouse fan total on time in seconds.",
+		}),
+	}
+
+	return l
 }
 
 func (l *Logic) Start() (err error) {
-	l.Arduino.Update = l.Update
+	l.arduino.Update = l.Update
 
 	l.ticker = time.NewTicker(time.Second)
 
-	err = l.Arduino.Open()
-	if nil == err {
-		l.wg.Add(1)
-		go l.run()
+	err = l.arduino.Open()
+	if nil != err {
+		//return err
 	}
 
-	return err
+	l.wg.Add(1)
+	go l.run()
+
+	return nil
 }
 
 func (l *Logic) Stop() {
 	l.done <- true
 	l.wg.Wait()
+}
+
+func (l *Logic) Preheat() {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+	l.preheat(true)
+	l.pushRelayState()
+}
+
+func (l *Logic) preheat(force bool) {
+	if force || (false == l.heaterLoopPump && time.Now().After(l.recircBlock)) {
+		l.recircUntil = time.Now().Add(time.Second * 30)
+		l.recircBlock = time.Now().Add(time.Minute * 5)
+		l.recircDHPump = true
+	}
+}
+
+func (l *Logic) Fan(until time.Time) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.whFanGauge.Set(1.0)
+	l.wholeHouseFan = true
+	l.fanUntil = until
+	l.pushRelayState()
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
@@ -73,10 +129,6 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 		if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
 			/* Cold water has increased 0.1G */
 			fmt.Printf("Cold++\n")
-
-			/* Make hot water because we think we'll need it. */
-			l.heaterLoopPump = true
-			l.heaterLoopUntil = time.Now().Add(time.Second * 30)
 		}
 		if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
 			/* Hot water has increased 0.1G */
@@ -85,6 +137,7 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 			/* Make hot water because we know we need it. */
 			l.heaterLoopPump = true
 			l.heaterLoopUntil = time.Now().Add(time.Second * 30)
+			l.preheat(false)
 		}
 		if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
 			/* Heater Loop has increased 0.1G */
@@ -96,7 +149,8 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 }
 
 func (l *Logic) pushRelayState() {
-	l.Arduino.SetRelayState(l.getRelayState())
+	l.arduino.SetRelayState(l.getRelayState())
+	fmt.Printf("Done pushing\n")
 }
 
 func (l *Logic) getRelayState() (rv int) {
@@ -122,6 +176,7 @@ func (l *Logic) getRelayState() (rv int) {
 }
 
 func (l *Logic) run() {
+	defer l.wg.Done()
 	for {
 		select {
 		case <-l.done:
@@ -130,11 +185,32 @@ func (l *Logic) run() {
 			return
 		case <-l.ticker.C:
 			l.mutex.Lock()
-			if time.Now().After(l.heaterLoopUntil) {
-				fmt.Printf("Stop Heater!\n")
+			now := time.Now()
+			push := false
+
+			if l.wholeHouseFan {
+				l.whFanOnTime.Inc()
+				if now.After(l.fanUntil) {
+					l.whFanGauge.Set(0.0)
+					l.wholeHouseFan = false
+					push = true
+				}
+			}
+
+			if l.recircDHPump && now.After(l.recircUntil) {
+				l.recircDHPump = false
+				push = true
+			}
+
+			if l.heaterLoopPump && now.After(l.heaterLoopUntil) {
 				l.heaterLoopPump = false
+				push = true
+			}
+
+			if push {
 				l.pushRelayState()
 			}
+
 			l.mutex.Unlock()
 		}
 	}
