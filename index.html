@@ -25,25 +25,8 @@
 </form>
 
 <form action="/control" >
-    Run the fan until a specific time:<br/>
-    <input type="time" name="fan_until"/>
-    <input type="hidden" name="fan_goal_state" value="run"/>
+    <input type="button" name="preheat_domestic">Preheat Domestic Hot Water</input>
 </form>
 
-<form action="/control" >
-    Stop the fan for a specific period of time:<br/>
-    <input type="text" name="fan_duration"/> (example: 30s, 3h, 2h30m)
-    <input type="hidden" name="fan_goal_state" value="stop"/>
-</form>
-
-<form action="/control" >
-    Stop the fan until a specific time:<br/>
-    <input type="time" name="fan_until"/>
-    <input type="hidden" name="fan_goal_state" value="stop"/>
-</form>
-
-<form action="/control">
-    <input type="submit" name="fan_goal_state" value="hvac">Set fan to automatic</button>
-</form>
 </body>
 </html>

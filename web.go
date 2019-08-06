@@ -44,6 +44,10 @@ func (wh *webHandler) handleControl(w http.ResponseWriter, r *http.Request) {
 			wh.logic.Fan(time.Now().Add(fan_duration))
 		}
 	}
+	preheat := r.URL.Query().Get("preheat_domestic")
+	if "preheat" == preheat {
+		wh.logic.Preheat()
+	}
 
 	buf, _ := ioutil.ReadFile(wh.post_page)
 	w.WriteHeader(200)

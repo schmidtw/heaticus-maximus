@@ -49,6 +49,8 @@ type OnOffThingOpts struct {
 	// the next time.  The duration specified in the OnUntil() call is ignored
 	// for this calculation.  The default is no blackout period.
 	BlackoutPeriod time.Duration
+
+	Gpio func(on bool)
 }
 
 type onOffThing struct {
@@ -63,6 +65,7 @@ type onOffThing struct {
 	mutex          sync.Mutex
 	refreshTicker  *time.Ticker
 	changeTicker   *time.Ticker
+	gpio           func(on bool)
 
 	// Metrics
 	status prometheus.Gauge
@@ -75,6 +78,11 @@ func NewOnOffThing(opts OnOffThingOpts) OnOffThing {
 		done:           make(chan bool),
 		refreshPeriod:  time.Second,
 		blackoutPeriod: opts.BlackoutPeriod,
+		gpio:           opts.Gpio,
+	}
+
+	if nil == t.gpio {
+		t.gpio = func(on bool) {}
 	}
 
 	// Initialize the tickers but stop them so we don't need
@@ -131,9 +139,11 @@ func (t *onOffThing) OnUntil(when time.Time) {
 	defer t.mutex.Unlock()
 	if now.After(t.notBefore) {
 		if false == t.state {
+			t.gpio(false)
 			t.refreshTicker.Stop()
 			t.refreshTicker = time.NewTicker(t.refreshPeriod)
 		}
+		t.gpio(true)
 		t.state = true
 		t.until = when
 		t.changeTicker.Stop()
@@ -166,6 +176,7 @@ func (t *onOffThing) run() {
 }
 
 func (t *onOffThing) stop() {
+	t.gpio(false)
 	t.state = false
 	t.notBefore = time.Now().Add(t.blackoutPeriod)
 	t.changeTicker.Stop()

@@ -15,7 +15,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	"sync"
 	"time"
 
@@ -32,43 +32,90 @@ const (
 type Logic struct {
 	arduino *ArduinoIoBoard
 
-	wholeHouseFan      bool
-	heaterLoopPump     bool
-	recircDHPump       bool
-	downstairsHeatPump bool
-	upstairsHeatPump   bool
+	controlBitMask int
+
+	wholeHouseFan      OnOffThing
+	heaterLoopPump     OnOffThing
+	recircDHPump       OnOffThing
+	downstairsHeatPump OnOffThing
+	upstairsHeatPump   OnOffThing
 
 	last *ArduinoBoardStatus
 
-	heaterLoopUntil time.Time
-	recircUntil     time.Time
-	recircBlock     time.Time
-	fanUntil        time.Time
-	ticker          *time.Ticker
-	done            chan bool
-	wg              sync.WaitGroup
-	mutex           sync.Mutex
+	mutex sync.Mutex
 
 	// Metrics
-	whFanGauge  prometheus.Gauge
-	whFanOnTime prometheus.Counter
+	coldWaterCounter  prometheus.Counter
+	hotWaterCounter   prometheus.Counter
+	heaterLoopCounter prometheus.Counter
+	changeCounter     prometheus.Counter
 }
 
 func NewLogic(arduino *ArduinoIoBoard) *Logic {
 	l := &Logic{
 		arduino: arduino,
-		done:    make(chan bool),
-		whFanGauge: promauto.NewGauge(prometheus.GaugeOpts{
+		coldWaterCounter: promauto.NewCounter(prometheus.CounterOpts{
 			Subsystem: "physical",
-			Name:      "wholehouse_fan_state",
-			Help:      "Wholehouse fan state (off=0, on=1) at the moment.",
+			Name:      "cold_water_usage",
+			Help:      "cold water usage counter in gallons",
 		}),
-		whFanOnTime: promauto.NewCounter(prometheus.CounterOpts{
+		hotWaterCounter: promauto.NewCounter(prometheus.CounterOpts{
 			Subsystem: "physical",
-			Name:      "wholehouse_fan_on_time",
-			Help:      "Wholehouse fan total on time in seconds.",
+			Name:      "hot_water_usage",
+			Help:      "hot water usage counter in gallons",
+		}),
+		heaterLoopCounter: promauto.NewCounter(prometheus.CounterOpts{
+			Subsystem: "physical",
+			Name:      "heater_loop_flow",
+			Help:      "heater loop flow counter in gallons",
+		}),
+		changeCounter: promauto.NewCounter(prometheus.CounterOpts{
+			Subsystem: "physical",
+			Name:      "update_count",
+			Help:      "the count of the updates",
 		}),
 	}
+
+	l.wholeHouseFan = NewOnOffThing(OnOffThingOpts{
+		Namespace: "heaticus_maximus",
+		Name:      "whole_house_fan",
+		Gpio: func(on bool) {
+			l.control(32, on)
+		},
+	})
+
+	l.heaterLoopPump = NewOnOffThing(OnOffThingOpts{
+		Namespace: "heaticus_maximus",
+		Name:      "heater_loop_pump",
+		Gpio: func(on bool) {
+			l.control(1, on)
+		},
+	})
+
+	l.recircDHPump = NewOnOffThing(OnOffThingOpts{
+		Namespace:      "heaticus_maximus",
+		Name:           "recirculating_domestic_hot_pump",
+		BlackoutPeriod: time.Minute * 5,
+		Gpio: func(on bool) {
+			l.control(2, on)
+		},
+	})
+
+	l.downstairsHeatPump = NewOnOffThing(OnOffThingOpts{
+		Namespace: "heaticus_maximus",
+		Name:      "downstairs_heat_pump",
+		Gpio: func(on bool) {
+			l.control(8, on)
+		},
+	})
+
+	l.upstairsHeatPump = NewOnOffThing(OnOffThingOpts{
+		Namespace: "heaticus_maximus",
+		Name:      "upstairs_heat_pump",
+		Gpio: func(on bool) {
+			l.control(4, on)
+		},
+	})
 
 	return l
 }
@@ -76,142 +123,68 @@ func NewLogic(arduino *ArduinoIoBoard) *Logic {
 func (l *Logic) Start() (err error) {
 	l.arduino.Update = l.Update
 
-	l.ticker = time.NewTicker(time.Second)
-
 	err = l.arduino.Open()
 	if nil != err {
 		//return err
 	}
 
-	l.wg.Add(1)
-	go l.run()
-
 	return nil
 }
 
 func (l *Logic) Stop() {
-	l.done <- true
-	l.wg.Wait()
+	l.wholeHouseFan.Shutdown()
+	l.heaterLoopPump.Shutdown()
+	l.recircDHPump.Shutdown()
+	l.downstairsHeatPump.Shutdown()
+	l.upstairsHeatPump.Shutdown()
 }
 
 func (l *Logic) Preheat() {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-	l.preheat(true)
-	l.pushRelayState()
-}
-
-func (l *Logic) preheat(force bool) {
-	if force || (false == l.heaterLoopPump && time.Now().After(l.recircBlock)) {
-		l.recircUntil = time.Now().Add(time.Second * 30)
-		l.recircBlock = time.Now().Add(time.Minute * 5)
-		l.recircDHPump = true
-	}
+	l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 }
 
 func (l *Logic) Fan(until time.Time) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
-
-	l.whFanGauge.Set(1.0)
-	l.wholeHouseFan = true
-	l.fanUntil = until
-	l.pushRelayState()
+	l.wholeHouseFan.OnUntil(until)
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
-	fmt.Printf("Update!\n")
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	//fmt.Printf("Update!\n")
+	l.changeCounter.Inc()
 
 	if nil != l.last {
 		last := l.last
 		if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
 			/* Cold water has increased 0.1G */
-			fmt.Printf("Cold++\n")
+			//fmt.Printf("Cold++\n")
+			l.coldWaterCounter.Add(0.1)
 		}
 		if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
 			/* Hot water has increased 0.1G */
-			fmt.Printf("Hot++\n")
+			//fmt.Printf("Hot++\n")
+			l.hotWaterCounter.Add(0.1)
 
 			/* Make hot water because we know we need it. */
-			l.heaterLoopPump = true
-			l.heaterLoopUntil = time.Now().Add(time.Second * 30)
-			l.preheat(false)
+			l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
+			l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 		}
 		if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
 			/* Heater Loop has increased 0.1G */
-			fmt.Printf("Heater++\n")
+			//fmt.Printf("Heater++\n")
+			l.heaterLoopCounter.Add(0.1)
 		}
-		l.pushRelayState()
 	}
 	l.last = s
 }
 
-func (l *Logic) pushRelayState() {
-	l.arduino.SetRelayState(l.getRelayState())
-	fmt.Printf("Done pushing\n")
-}
+func (l *Logic) control(bit int, on bool) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
-func (l *Logic) getRelayState() (rv int) {
-	if l.heaterLoopPump {
-		rv |= 1
-	}
-	if l.recircDHPump {
-		rv |= 2
-	}
-	if l.upstairsHeatPump {
-		rv |= 4
-	}
-	if l.downstairsHeatPump {
-		rv |= 8
-	}
-	// 16 is unused
-	if l.wholeHouseFan {
-		rv |= 32
+	if on {
+		l.controlBitMask |= bit
+	} else {
+		l.controlBitMask &^= bit
 	}
 
-	fmt.Printf("Setting: 0x%02x\n", rv)
-	return rv
-}
-
-func (l *Logic) run() {
-	defer l.wg.Done()
-	for {
-		select {
-		case <-l.done:
-			fmt.Printf("Done!\n")
-			l.ticker.Stop()
-			return
-		case <-l.ticker.C:
-			l.mutex.Lock()
-			now := time.Now()
-			push := false
-
-			if l.wholeHouseFan {
-				l.whFanOnTime.Inc()
-				if now.After(l.fanUntil) {
-					l.whFanGauge.Set(0.0)
-					l.wholeHouseFan = false
-					push = true
-				}
-			}
-
-			if l.recircDHPump && now.After(l.recircUntil) {
-				l.recircDHPump = false
-				push = true
-			}
-
-			if l.heaterLoopPump && now.After(l.heaterLoopUntil) {
-				l.heaterLoopPump = false
-				push = true
-			}
-
-			if push {
-				l.pushRelayState()
-			}
-
-			l.mutex.Unlock()
-		}
-	}
+	l.arduino.SetRelayState(l.controlBitMask)
 }
