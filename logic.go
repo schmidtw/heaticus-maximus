@@ -140,6 +140,7 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Preheat() {
+	l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
 	l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 }
 
