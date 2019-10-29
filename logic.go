@@ -95,7 +95,7 @@ func NewLogic(arduino *ArduinoIoBoard) *Logic {
 	l.recircDHPump = NewOnOffThing(OnOffThingOpts{
 		Namespace:      "heaticus_maximus",
 		Name:           "recirculating_domestic_hot_pump",
-		BlackoutPeriod: time.Minute * 5,
+		BlackoutPeriod: time.Minute * 0,
 		Gpio: func(on bool) {
 			l.control(2, on)
 		},
@@ -140,8 +140,8 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Preheat() {
-	l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
-	l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
+	l.heaterLoopPump.OnUntil(time.Now().Add(time.Minute * 3))
+	l.recircDHPump.OnUntil(time.Now().Add(time.Minute * 3))
 }
 
 func (l *Logic) Fan(until time.Time) {
@@ -152,27 +152,28 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 	//fmt.Printf("Update!\n")
 	l.changeCounter.Inc()
 
-	if nil != l.last {
-		last := l.last
-		if s.Inputs[ColdWaterIndex].State != last.Inputs[ColdWaterIndex].State {
-			/* Cold water has increased 0.1G */
-			//fmt.Printf("Cold++\n")
-			l.coldWaterCounter.Add(0.1)
-		}
-		if s.Inputs[HotWaterIndex].State != last.Inputs[HotWaterIndex].State {
-			/* Hot water has increased 0.1G */
-			//fmt.Printf("Hot++\n")
-			l.hotWaterCounter.Add(0.1)
+	if nil == l.last {
+		l.last = s
+	}
 
-			/* Make hot water because we know we need it. */
-			l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
-			l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
-		}
-		if s.Inputs[HeaterLoopIndex].State != last.Inputs[HeaterLoopIndex].State {
-			/* Heater Loop has increased 0.1G */
-			//fmt.Printf("Heater++\n")
-			l.heaterLoopCounter.Add(0.1)
-		}
+	if s.Inputs[ColdWaterIndex].State != l.last.Inputs[ColdWaterIndex].State {
+		/* Cold water has increased 0.1G */
+		//fmt.Printf("Cold++\n")
+		l.coldWaterCounter.Add(0.1)
+	}
+	if s.Inputs[HotWaterIndex].State != l.last.Inputs[HotWaterIndex].State {
+		/* Hot water has increased 0.1G */
+		//fmt.Printf("Hot++\n")
+		l.hotWaterCounter.Add(0.1)
+
+		/* Make hot water because we know we need it. */
+		l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
+		//l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
+	}
+	if s.Inputs[HeaterLoopIndex].State != l.last.Inputs[HeaterLoopIndex].State {
+		/* Heater Loop has increased 0.1G */
+		//fmt.Printf("Heater++\n")
+		l.heaterLoopCounter.Add(0.1)
 	}
 	l.last = s
 }

@@ -1,7 +1,12 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<title>FIXME</title>
+<title>House Heater</title>
+<style>
+* {
+	font-size: 36px;
+}
+</style>
 <!--
 <link rel="stylesheet" type="text/css" href="FIXME" />
 <script type="text/javascript" src="FIXME"></script>
@@ -13,19 +18,51 @@
 </head>
 <body>
 
+	<!--
 <div class="fan-state">
 		<div class="label">fan state</div>
 		<div class="state">off</div>
 </div>
+-->
 
 <form action="/control" >
     Run the fan for a specific period of time:<br/>
     <input type="text" name="fan_duration"/> (example: 30s, 3h, 2h30m)
     <input type="hidden" name="fan_goal_state" value="run"/>
 </form>
-
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+<!--
 <form action="/control" >
-    <input type="button" name="preheat_domestic" value="preheat">Preheat Domestic Hot Water</input>
+    <input type="hidden" name="fan_goal_state" value="run"/>
+    <button type="submit" name="fan_duration" value="1h">Run Fan - 1h</button>
+</form>
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+<form action="/control" >
+    <input type="hidden" name="fan_goal_state" value="run"/>
+    <button type="submit" name="fan_duration" value="2h">Run Fan - 2h</button>
+</form>
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+<form action="/control" >
+    <input type="hidden" name="fan_goal_state" value="run"/>
+    <button type="submit" name="fan_duration" value="4h">Run Fan - 4h</button>
+</form>
+-->
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+<form action="/control" >
+    <button type="submit" name="preheat_domestic" value="preheat">Preheat Domestic Hot Water</button>
 </form>
 
 </body>
