@@ -31,6 +31,9 @@ type OnOffThing interface {
 	// on, the time it turns off is adjusted
 	OnUntil(time.Time)
 
+	// Turns the thing on until the last thing that needs it expires.
+	NeededUntil(string, time.Time)
+
 	// Turns the thing off indefinitely.
 	Off()
 
@@ -58,6 +61,7 @@ type onOffThing struct {
 	state          bool
 	blackoutPeriod time.Duration
 	refreshPeriod  time.Duration
+	neededUntil    map[string]time.Time
 	until          time.Time
 	notBefore      time.Time
 	done           chan bool
@@ -76,6 +80,7 @@ func NewOnOffThing(opts OnOffThingOpts) OnOffThing {
 	t := &onOffThing{
 		name:           opts.Name,
 		done:           make(chan bool),
+		neededUntil:    make(map[string]time.Time),
 		refreshPeriod:  time.Second,
 		blackoutPeriod: opts.BlackoutPeriod,
 		gpio:           opts.Gpio,
@@ -150,6 +155,19 @@ func (t *onOffThing) OnUntil(when time.Time) {
 		t.changeTicker = time.NewTicker(when.Sub(now))
 		t.status.Set(1.0)
 	}
+}
+
+func (t *onOffThing) NeededUntil(name string, when time.Time) {
+	t.neededUntil[name] = when
+
+	until := time.Now()
+	for _, v := range t.neededUntil {
+		if v.After(until) {
+			until = v
+		}
+	}
+
+	t.OnUntil( until )
 }
 
 func (t *onOffThing) run() {
