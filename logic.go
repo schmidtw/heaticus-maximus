@@ -34,6 +34,10 @@ type Logic struct {
 
 	controlBitMask int
 
+	domesticHeatUntil   time.Time
+	downstairsHeatUntil time.Time
+	upstairsHeatUntil   time.Time
+
 	wholeHouseFan      OnOffThing
 	heaterLoopPump     OnOffThing
 	recircDHPump       OnOffThing
@@ -140,12 +144,17 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Preheat() {
-	l.heaterLoopPump.OnUntil(time.Now().Add(time.Minute * 3))
+	l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Minute * 3))
 	l.recircDHPump.OnUntil(time.Now().Add(time.Minute * 3))
 }
 
 func (l *Logic) Fan(until time.Time) {
 	l.wholeHouseFan.OnUntil(until)
+}
+
+func (l *Logic) HeatDownstairs(until time.Time) {
+	l.heaterLoopPump.NeededUntil("downstairs", until)
+	l.downstairsHeatPump.OnUntil(until)
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
@@ -167,7 +176,7 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 		l.hotWaterCounter.Add(0.1)
 
 		/* Make hot water because we know we need it. */
-		l.heaterLoopPump.OnUntil(time.Now().Add(time.Second * 30))
+		l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Second * 30))
 		//l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 	}
 	if s.Inputs[HeaterLoopIndex].State != l.last.Inputs[HeaterLoopIndex].State {

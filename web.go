@@ -48,6 +48,14 @@ func (wh *webHandler) handleControl(w http.ResponseWriter, r *http.Request) {
 	if "preheat" == preheat {
 		wh.logic.Preheat()
 	}
+	heat_goal := r.URL.Query().Get("heat_goal_state")
+	if "run" == heat_goal {
+		heat_duration, err := time.ParseDuration(r.URL.Query().Get("heat_duration"))
+		fmt.Printf("Duration: %v\n", heat_duration)
+		if nil == err {
+			wh.logic.HeatDownstairs(time.Now().Add(heat_duration))
+		}
+	}
 
 	buf, _ := ioutil.ReadFile(wh.post_page)
 	w.WriteHeader(200)
