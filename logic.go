@@ -64,7 +64,8 @@ type Logic struct {
 
 func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
 	l := &Logic{
-		arduino: arduino,
+		arduino:     arduino,
+		tempSensors: ts,
 		coldWaterCounter: promauto.NewCounter(prometheus.CounterOpts{
 			Subsystem: "physical",
 			Name:      "cold_water_usage",
