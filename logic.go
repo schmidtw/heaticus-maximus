@@ -30,7 +30,8 @@ const (
 )
 
 type Logic struct {
-	arduino *ArduinoIoBoard
+	arduino     *ArduinoIoBoard
+	tempSensors *TempSensors
 
 	controlBitMask int
 
@@ -55,7 +56,7 @@ type Logic struct {
 	changeCounter     prometheus.Counter
 }
 
-func NewLogic(arduino *ArduinoIoBoard) *Logic {
+func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
 	l := &Logic{
 		arduino: arduino,
 		coldWaterCounter: promauto.NewCounter(prometheus.CounterOpts{
@@ -144,7 +145,7 @@ func (l *Logic) Stop() {
 }
 
 func (l *Logic) Preheat() {
-	l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Minute * 3))
+	l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Minute*3))
 	l.recircDHPump.OnUntil(time.Now().Add(time.Minute * 3))
 }
 
@@ -176,7 +177,7 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 		l.hotWaterCounter.Add(0.1)
 
 		/* Make hot water because we know we need it. */
-		l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Second * 30))
+		l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Second*30))
 		//l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 	}
 	if s.Inputs[HeaterLoopIndex].State != l.last.Inputs[HeaterLoopIndex].State {

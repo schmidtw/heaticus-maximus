@@ -27,6 +27,7 @@ import (
 
 type webHandler struct {
 	logic           *Logic
+	tempSensors     *TempSensors
 	main_page       string
 	post_page       string
 	ctlRoute        *mux.Router
@@ -93,11 +94,12 @@ func (wh *webHandler) Stop() {
 	wh.ctlEndpoint.Shutdown(context.Background())
 }
 
-func NewWeb(l *Logic, v *viper.Viper) *webHandler {
+func NewWeb(l *Logic, ts *TempSensors, v *viper.Viper) *webHandler {
 	wh := &webHandler{
-		logic:     l,
-		main_page: "index.html",
-		post_page: "post.html",
+		logic:       l,
+		tempSensors: ts,
+		main_page:   "index.html",
+		post_page:   "post.html",
 	}
 
 	wh.ctlRoute = mux.NewRouter()

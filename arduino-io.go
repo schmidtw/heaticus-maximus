@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/schmidtw/go-serial"
+	serial "github.com/schmidtw/go232"
 )
 
 // FindArduinos looks at the list of serial ports present and returns the list
@@ -101,7 +101,7 @@ func (a *ArduinoIoBoard) run() {
 		s, err := a.read()
 		//fmt.Printf("got: '%s'\n", s )
 		if nil == err {
-		//fmt.Printf("no error: '%s'\n", s )
+			//fmt.Printf("no error: '%s'\n", s )
 			var status ArduinoBoardStatus
 			d := json.NewDecoder(strings.NewReader(s))
 			if nil == d.Decode(&status) {
