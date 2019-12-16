@@ -47,13 +47,19 @@ type Logic struct {
 
 	last *ArduinoBoardStatus
 
-	mutex sync.Mutex
+	relayMutex      sync.Mutex
+	downstairsMutex sync.Mutex
+	wg              sync.WaitGroup
+	done            chan bool
+
+	downstairsTemp float64
 
 	// Metrics
-	coldWaterCounter  prometheus.Counter
-	hotWaterCounter   prometheus.Counter
-	heaterLoopCounter prometheus.Counter
-	changeCounter     prometheus.Counter
+	coldWaterCounter    prometheus.Counter
+	hotWaterCounter     prometheus.Counter
+	heaterLoopCounter   prometheus.Counter
+	changeCounter       prometheus.Counter
+	downstairsTempGauge prometheus.Gauge
 }
 
 func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
@@ -78,6 +84,11 @@ func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
 			Subsystem: "physical",
 			Name:      "update_count",
 			Help:      "the count of the updates",
+		}),
+		downstairsTempGauge: promauto.NewGauge(prometheus.GaugeOpts{
+			Subsystem: "physical",
+			Name:      "downstairs_target_temp",
+			Help:      "the target temperature for downstairs (F)",
 		}),
 	}
 
@@ -122,6 +133,9 @@ func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
 		},
 	})
 
+	l.wg.Add(1)
+	go l.downstairsThermostat()
+
 	return l
 }
 
@@ -142,6 +156,8 @@ func (l *Logic) Stop() {
 	l.recircDHPump.Shutdown()
 	l.downstairsHeatPump.Shutdown()
 	l.upstairsHeatPump.Shutdown()
+	l.done <- true
+	l.wg.Wait()
 }
 
 func (l *Logic) Preheat() {
@@ -156,6 +172,14 @@ func (l *Logic) Fan(until time.Time) {
 func (l *Logic) HeatDownstairs(until time.Time) {
 	l.heaterLoopPump.NeededUntil("downstairs", until)
 	l.downstairsHeatPump.OnUntil(until)
+}
+
+func (l *Logic) SetDownstairsTarget(goal float64) {
+	l.downstairsMutex.Lock()
+	l.downstairsTemp = goal
+	l.downstairsMutex.Unlock()
+
+	l.downstairsTempGauge.Set(goal)
 }
 
 func (l *Logic) Update(s *ArduinoBoardStatus) {
@@ -189,8 +213,8 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 }
 
 func (l *Logic) control(bit int, on bool) {
-	l.mutex.Lock()
-	defer l.mutex.Unlock()
+	l.relayMutex.Lock()
+	defer l.relayMutex.Unlock()
 
 	if on {
 		l.controlBitMask |= bit
@@ -199,4 +223,26 @@ func (l *Logic) control(bit int, on bool) {
 	}
 
 	l.arduino.SetRelayState(l.controlBitMask)
+}
+
+func (l *Logic) downstairsThermostat() {
+	defer l.wg.Done()
+
+	t := time.NewTicker(time.Second)
+	for {
+		select {
+		case <-l.done:
+			t.Stop()
+			return
+		case <-t.C:
+			present := (*l.tempSensors).Get("downstairs_main")
+			l.downstairsMutex.Lock()
+			target := l.downstairsTemp
+			l.downstairsMutex.Unlock()
+
+			if present < target {
+				l.HeatDownstairs(time.Now().Add(time.Minute * 3))
+			}
+		}
+	}
 }

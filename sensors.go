@@ -13,6 +13,8 @@ import (
 type TempSensors interface {
 	// Shuts down and turns everything off.
 	Shutdown()
+
+	Get(name string) float64
 }
 
 type TempSensorsOpts struct {
@@ -118,6 +120,7 @@ func (ts *tempSensors) run() {
 	for {
 		select {
 		case <-ts.done:
+			ts.ticker.Stop()
 			ts.adapter.Close()
 			return
 		case <-ts.ticker.C:

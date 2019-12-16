@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -55,6 +56,11 @@ func (wh *webHandler) handleControl(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Duration: %v\n", heat_duration)
 		if nil == err {
 			wh.logic.HeatDownstairs(time.Now().Add(heat_duration))
+		}
+	}
+	if "maintain" == heat_goal {
+		if goal, err := strconv.ParseFloat(r.URL.Query().Get("heat_downstairs_temperature"), 64); nil == err {
+			wh.logic.SetDownstairsTarget(goal)
 		}
 	}
 
