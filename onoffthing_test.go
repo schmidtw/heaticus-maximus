@@ -16,6 +16,7 @@ package main
 
 import (
 	//"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,4 +91,40 @@ func TestBlackout(t *testing.T) {
 
 	/* We're done. */
 	oot.Shutdown()
+}
+
+func TestNeededUntil(t *testing.T) {
+	//assert := assert.New(t)
+
+	opts := OnOffThingOpts{
+		Namespace: "testing",
+		Name:      "testNeededUntil",
+	}
+
+	oot := NewOnOffThing(opts)
+
+	var wg sync.WaitGroup
+
+	go func() {
+		defer wg.Done()
+		wg.Add(1)
+
+		oot.NeededUntil("foo", time.Now().Add(10*time.Second))
+		oot.NeededUntil("bar", time.Now().Add(10*time.Second))
+		oot.NeededUntil("car", time.Now().Add(10*time.Second))
+		oot.NeededUntil("goo", time.Now().Add(10*time.Second))
+		oot.NeededUntil("cat", time.Now().Add(10*time.Second))
+	}()
+	go func() {
+		defer wg.Done()
+		wg.Add(1)
+
+		oot.NeededUntil("foo", time.Now().Add(10*time.Second))
+		oot.NeededUntil("bar", time.Now().Add(10*time.Second))
+		oot.NeededUntil("car", time.Now().Add(10*time.Second))
+		oot.NeededUntil("goo", time.Now().Add(10*time.Second))
+		oot.NeededUntil("cat", time.Now().Add(10*time.Second))
+	}()
+
+	wg.Wait()
 }

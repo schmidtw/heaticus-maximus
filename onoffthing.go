@@ -67,6 +67,7 @@ type onOffThing struct {
 	done           chan bool
 	wg             sync.WaitGroup
 	mutex          sync.Mutex
+	untilMutex     sync.Mutex
 	refreshTicker  *time.Ticker
 	changeTicker   *time.Ticker
 	gpio           func(on bool)
@@ -158,6 +159,7 @@ func (t *onOffThing) OnUntil(when time.Time) {
 }
 
 func (t *onOffThing) NeededUntil(name string, when time.Time) {
+	t.untilMutex.Lock()
 	t.neededUntil[name] = when
 
 	until := time.Now()
@@ -166,8 +168,9 @@ func (t *onOffThing) NeededUntil(name string, when time.Time) {
 			until = v
 		}
 	}
+	t.untilMutex.Unlock()
 
-	t.OnUntil( until )
+	t.OnUntil(until)
 }
 
 func (t *onOffThing) run() {
