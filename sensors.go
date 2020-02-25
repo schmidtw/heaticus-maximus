@@ -72,7 +72,7 @@ func NewTempSensors(opts TempSensorsOpts) (TempSensors, error) {
 	}
 
 	list, err := adapter.Search()
-	if nil != err {
+	if nil != err && 0 < len(list) {
 		return nil, err
 	}
 

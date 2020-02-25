@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
-	"strings"
 	"sync"
 
 	serial "github.com/schmidtw/go232"
@@ -35,17 +33,13 @@ type ArduinoIoBoard struct {
 }
 
 type ArduinoBoardInputStatus struct {
-	PulseCount    int
-	State         int
-	LastPulseTime float64
+	State int
 }
 
 type ArduinoBoardStatus struct {
-	SerialNumber    string
-	FirmwareVersion string
-	UpTime          int
-	RelayState      int
-	Inputs          map[string]ArduinoBoardInputStatus `json:-`
+	SerialNumber string
+	RelayState   int
+	Inputs       map[int]int
 }
 
 func (a *ArduinoIoBoard) Open() (err error) {
@@ -58,7 +52,7 @@ func (a *ArduinoIoBoard) Open() (err error) {
 		Baud:      115200,
 		Config:    "8N1",
 		Canonical: false,
-		Vmin:      200,
+		Vmin:      1,
 		Vtime:     1,
 	}
 
@@ -68,19 +62,6 @@ func (a *ArduinoIoBoard) Open() (err error) {
 		a.wg.Add(1)
 		go a.run()
 	}
-	/*
-			a.read()
-
-				s, _ := a.read()
-				d := json.NewDecoder(strings.NewReader(s))
-				var status ArduinoBoardStatus
-				d.Decode(&status)
-
-				fmt.Printf("got: '%s'\n\n%#v\n", s, status)
-		} else {
-			fmt.Printf("err %#v\n", err)
-		}
-	*/
 
 	return err
 }
@@ -103,8 +84,12 @@ func (a *ArduinoIoBoard) run() {
 		if nil == err {
 			//fmt.Printf("no error: '%s'\n", s )
 			var status ArduinoBoardStatus
-			d := json.NewDecoder(strings.NewReader(s))
-			if nil == d.Decode(&status) {
+			var input int
+			n, err := fmt.Scanf(s, "%02X|%02X|%02X\n", &status.SerialNumber, input, &status.RelayState)
+			if nil == err && 3 == n {
+				for i := 0; i < 8; i++ {
+					status.Inputs[i] = 1 & (input >> i)
+				}
 				//fmt.Printf( "Decoding is ok\n")
 				if nil != a.Update {
 					//fmt.Printf( "Calling Update\n")
@@ -139,47 +124,28 @@ func (a *ArduinoIoBoard) SetRelayState(state int) (err error) {
 	return err
 }
 
-func (a *ArduinoIoBoard) Help() (rv string, err error) {
-	if nil != a.serial {
-		b := []byte{'s', ' ', '0', '\n', '\n'}
-		a.serial.Write(b)
-		rv, err = a.read()
-		if nil == err {
-			fmt.Printf("%s\n", rv)
-		}
-	}
-
-	for {
-		rv, err = a.read()
-		if nil == err {
-			//fmt.Printf("%s\n", rv)
-			d := json.NewDecoder(strings.NewReader(rv))
-			var status ArduinoBoardStatus
-			if nil == d.Decode(&status) {
-				fmt.Printf("%d - Out: %d - 5: %d:%d - 6: %d:%d - 7: %d:%d\n", status.UpTime, status.RelayState,
-					status.Inputs["5"].State, status.Inputs["5"].PulseCount,
-					status.Inputs["6"].State, status.Inputs["6"].PulseCount,
-					status.Inputs["7"].State, status.Inputs["7"].PulseCount)
-				//fmt.Printf("got: %#v\n", status)
-			}
-		}
-	}
-
-	return rv, err
-}
-
 func (a *ArduinoIoBoard) read() (rv string, err error) {
 	if nil != a.serial {
 		b := make([]byte, 1)
-		n := 1
-		err = nil
-		for 0 < n && nil == err && '\n' != b[0] {
-			n, err = a.serial.Read(b)
-			rv += string(b[:n])
-		}
+		i := 0
+		for i < 9 {
+			n, err := a.serial.Read(b)
 
-		if nil != err {
-			rv = ""
+			if nil != err {
+				return "", err
+			}
+
+			// The format is always: '00|00|00\n' so if we see a \n before
+			// the end, then we're out of sync.  Restart the search.
+			var newline byte = '\n'
+			if i < 8 && newline == b[0] {
+				i = 0
+				rv = ""
+				continue
+			}
+
+			rv += string(b[:n])
+			i += n
 		}
 	}
 

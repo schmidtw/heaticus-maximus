@@ -3,7 +3,7 @@
 // The constant that defines how long to debounce the signals.  In micro-seconds.
 const long DEBOUNCE_TIME_MS = 20;
 
-const long OUTPUT_REPORT_MIN_INTERVAL_S = 1;
+const unsigned long OUTPUT_REPORT_MIN_INTERVAL_MS = 1000;
 
 const long SERIAL_NUMBER = 0;
 
@@ -62,8 +62,8 @@ void loop() {
 
 void OutputData()
 {
-  // Always send 6 characters
-  // 0|f|d\n
+  // Always send 9 characters
+  // "00|00|00\n"  SN|input|output
   if( SERIAL_NUMBER < 0x10 ) {
     Serial.print(F("0"));
   }
@@ -102,23 +102,14 @@ void SetRelayState( long out )
 // Return if the output report should be sent.
 bool UpdateInputState()
 {
-  static unsigned long _seconds_since_boot = 0;
-  static long debounce_time[6] = { 0L, 0L, 0L, 0L, 0L, 0L };
-  static unsigned long last_second = 0;
-  static long last_report_s = 0;
+  static long debounce_time[8] = { 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L };
+  static unsigned long last_report_time = 0;
   bool rv = false;
 
   unsigned long now = millis();
-  unsigned long ms = now - last_second;
 
-  if (ms > 1000UL) {
-    last_second = now;
-    _seconds_since_boot++;
-    ms -= 1000UL;
-  }
-
-  for (int i = 0; i < 6; i++) {
-    int io = digitalRead(i + 2);
+  for (int i = 2; i < 8; i++) {
+    int io = digitalRead(i);
     if ( (io != bitRead(_input_state, i)) && (now > debounce_time[i]) ) {
       debounce_time[i] = now + DEBOUNCE_TIME_MS;
       if (LOW == io) {
@@ -131,8 +122,8 @@ bool UpdateInputState()
   }
 
   // Always send a report at the minimum interval.
-  if (last_report_s + OUTPUT_REPORT_MIN_INTERVAL_S <= _seconds_since_boot ) {
-    last_report_s = _seconds_since_boot;
+  if (now - last_report_time >= OUTPUT_REPORT_MIN_INTERVAL_MS ) {
+    last_report_time = now;
     rv  = true;
   }
 

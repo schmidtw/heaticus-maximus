@@ -24,9 +24,9 @@ import (
 )
 
 const (
-	ColdWaterIndex  = "5"
-	HotWaterIndex   = "6"
-	HeaterLoopIndex = "7"
+	ColdWaterIndex  = 5
+	HotWaterIndex   = 6
+	HeaterLoopIndex = 7
 )
 
 type Logic struct {
@@ -134,8 +134,10 @@ func NewLogic(arduino *ArduinoIoBoard, ts *TempSensors) *Logic {
 		},
 	})
 
-	l.wg.Add(1)
-	go l.downstairsThermostat()
+	if nil != ts {
+		l.wg.Add(1)
+		go l.downstairsThermostat()
+	}
 
 	return l
 }
@@ -191,12 +193,12 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 		l.last = s
 	}
 
-	if s.Inputs[ColdWaterIndex].State != l.last.Inputs[ColdWaterIndex].State {
+	if s.Inputs[ColdWaterIndex] != l.last.Inputs[ColdWaterIndex] {
 		/* Cold water has increased 0.1G */
 		//fmt.Printf("Cold++\n")
 		l.coldWaterCounter.Add(0.1)
 	}
-	if s.Inputs[HotWaterIndex].State != l.last.Inputs[HotWaterIndex].State {
+	if s.Inputs[HotWaterIndex] != l.last.Inputs[HotWaterIndex] {
 		/* Hot water has increased 0.1G */
 		//fmt.Printf("Hot++\n")
 		l.hotWaterCounter.Add(0.1)
@@ -205,7 +207,7 @@ func (l *Logic) Update(s *ArduinoBoardStatus) {
 		l.heaterLoopPump.NeededUntil("domestic", time.Now().Add(time.Second*30))
 		//l.recircDHPump.OnUntil(time.Now().Add(time.Second * 30))
 	}
-	if s.Inputs[HeaterLoopIndex].State != l.last.Inputs[HeaterLoopIndex].State {
+	if s.Inputs[HeaterLoopIndex] != l.last.Inputs[HeaterLoopIndex] {
 		/* Heater Loop has increased 0.1G */
 		//fmt.Printf("Heater++\n")
 		l.heaterLoopCounter.Add(0.1)
