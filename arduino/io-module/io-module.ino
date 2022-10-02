@@ -3,14 +3,13 @@
 // The constant that defines how long to debounce the signals.  In micro-seconds.
 const long DEBOUNCE_TIME_MS = 20;
 
-const long OUTPUT_REPORT_MIN_INTERVAL_S = 10;
 
-byte _last_state[6] = {0, 0, 0, 0, 0, 0};
-unsigned long _pulse_count[6] = { 0UL, 0UL, 0UL, 0UL, 0UL, 0UL };
-unsigned long _last_delta_s[6] = { 0UL, 0UL, 0UL, 0UL, 0UL, 0UL };
-unsigned long _last_delta_ms[6] = { 0UL, 0UL, 0UL, 0UL, 0UL, 0UL };
-unsigned long _seconds_since_boot = 0;
-long _output_state = 0;
+const unsigned long OUTPUT_REPORT_MIN_INTERVAL_MS = 1000;
+
+const long SERIAL_NUMBER = 0;
+
+unsigned int _output_state = 0;
+unsigned int _input_state = 0;
 
 void setup() {
 
@@ -48,7 +47,8 @@ void loop() {
 
     switch (cmd) {
       case '?':
-        Serial.println(F("s [0-63] sets the relay output bitmask\ng gets the latest output\n"));
+        Serial.println(F("s [0-63] sets the relay output bitmask\ng gets the latest output\ndata format: %02X|%02X|%02X\\n, sn, input, output\n"));
+
         break;
       case 's':
         _output_state = Serial.parseInt();
@@ -64,31 +64,24 @@ void loop() {
 
 void OutputData()
 {
-  Serial.print(F("{"));
-  Serial.print( F(" \"SerialNumber\": \"0000001\""));
-  Serial.print(F(", \"FirmwareVersion\": \"1.0.0\""));
-  Serial.print(F(", \"UpTime\": ")); Serial.print(_seconds_since_boot, DEC);
-  Serial.print(F(", \"RelayState\": ")); Serial.print(_output_state, DEC);
-  Serial.print(F(", \"Inputs\": {"));
-  int j = 0;
-  char comma = ' ';
-  for (int i = 0; i < 6; i++) {
-    Serial.print(comma);
-    Serial.print(F("\"")); Serial.print((2 + i), DEC); Serial.print(F("\": {"));
-    Serial.print(F("  \"PulseCount\": ")); Serial.print(_pulse_count[i], DEC);
-    Serial.print(F(", \"State\": " )); Serial.print(_last_state[i], DEC);
-    Serial.print(F(", \"LastPulseTime\": ")); Serial.print(_last_delta_s[i]); Serial.print(F("."));
-    if ( 100 > _last_delta_ms[i] ) {
-      Serial.print(F("0"));
-    }
-    if ( 10 > _last_delta_ms[i] ) {
-      Serial.print(F("0"));
-    }
-    Serial.print(_last_delta_ms[i], DEC);
-    Serial.print(F(" }"));
-    comma = ',';
+  // Always send 9 characters
+  // "00|00|00\n"  SN|input|output
+  if( SERIAL_NUMBER < 0x10 ) {
+    Serial.print(F("0"));
   }
-  Serial.print(F(" } }\n"));
+  Serial.print(SERIAL_NUMBER, HEX);
+  Serial.print(F("|"));
+  if( _input_state < 0x10 ) {
+    Serial.print(F("0"));
+  }
+  Serial.print(_input_state, HEX);
+  Serial.print(F("|"));
+  if( _output_state < 0x10 ) {
+    Serial.print(F("0"));
+  }
+  Serial.print(_output_state, HEX);
+  Serial.print(F("\n"));
+  Serial.flush();
 }
 
 void SetRelayState( long out )
@@ -111,40 +104,30 @@ void SetRelayState( long out )
 // Return if the output report should be sent.
 bool UpdateInputState()
 {
-  static long debounce_time[6] = { 0L, 0L, 0L, 0L, 0L, 0L };
-  static int last_state[6] = { LOW, LOW, LOW, LOW, LOW, LOW };
-  static unsigned long last_second = 0;
-  static long last_report_s = 0;
+  static long debounce_time[8] = { 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L };
+  static unsigned long last_report_time = 0;
   bool rv = false;
 
   unsigned long now = millis();
-  unsigned long ms = now - last_second;
 
-  if (ms > 1000UL) {
-    last_second = now;
-    _seconds_since_boot++;
-    ms -= 1000UL;
-  }
-
-  for (int i = 0; i < 6; i++) {
-    int io = digitalRead(i + 2);
-    if ( io != last_state[i] && now > debounce_time[i]) {
+  for (int i = 2; i < 8; i++) {
+    int io = digitalRead(i);
+    if ( (io != bitRead(_input_state, i)) && (now > debounce_time[i]) ) {
       debounce_time[i] = now + DEBOUNCE_TIME_MS;
-      last_state[i] = io;
-      _last_state[i] = 1;
       if (LOW == io) {
-        _last_state[i] = 0;
+        bitClear(_input_state, i);
+      } else {
+        bitSet(_input_state, i);
       }
-      _pulse_count[i]++;
-      _last_delta_s[i] = _seconds_since_boot;
-      _last_delta_ms[i] = ms;
+
       rv = true;
     }
   }
 
   // Always send a report at the minimum interval.
-  if (last_report_s + OUTPUT_REPORT_MIN_INTERVAL_S <= _seconds_since_boot ) {
-    last_report_s = _seconds_since_boot;
+  if (now - last_report_time >= OUTPUT_REPORT_MIN_INTERVAL_MS ) {
+    last_report_time = now;
+
     rv  = true;
   }
 

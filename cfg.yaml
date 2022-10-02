@@ -1,0 +1,14 @@
+---
+    wiring:
+        arduino:
+            serial-number: "123abc"
+            input:
+                cold-water-bit:  5
+                hot-water-bit:   6
+                heater-loop-bit: 7
+            output:
+                heater-loop-pump-bit:        0
+                recirculating-loop-pump-bit: 1
+                upstairs-heater-pump-bit:    2
+                downstairs-heater-pump-bit:  3
+                whole-house-fan-bit:         5

@@ -1,0 +1,17 @@
+[Unit]
+Description=The heater service.
+After=network.target
+
+[Service]
+Type=simple
+PIDFile=/run/heaticus-maximus.pid
+ExecStartPre=/usr/bin/rm -f /run/heaticus-maximus.pid
+ExecStart=/usr/bin/heaticus-maximus
+ExecReload=/bin/kill -s HUP $MAINPID
+TimeoutStopSec=10
+KillMode=process
+PrivateTmp=true
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
