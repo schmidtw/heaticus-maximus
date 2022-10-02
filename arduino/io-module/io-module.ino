@@ -3,6 +3,7 @@
 // The constant that defines how long to debounce the signals.  In micro-seconds.
 const long DEBOUNCE_TIME_MS = 20;
 
+
 const unsigned long OUTPUT_REPORT_MIN_INTERVAL_MS = 1000;
 
 const long SERIAL_NUMBER = 0;
@@ -47,6 +48,7 @@ void loop() {
     switch (cmd) {
       case '?':
         Serial.println(F("s [0-63] sets the relay output bitmask\ng gets the latest output\ndata format: %02X|%02X|%02X\\n, sn, input, output\n"));
+
         break;
       case 's':
         _output_state = Serial.parseInt();
@@ -117,6 +119,7 @@ bool UpdateInputState()
       } else {
         bitSet(_input_state, i);
       }
+
       rv = true;
     }
   }
@@ -124,6 +127,7 @@ bool UpdateInputState()
   // Always send a report at the minimum interval.
   if (now - last_report_time >= OUTPUT_REPORT_MIN_INTERVAL_MS ) {
     last_report_time = now;
+
     rv  = true;
   }
 
