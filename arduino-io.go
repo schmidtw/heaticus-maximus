@@ -85,10 +85,13 @@ func (a *ArduinoIoBoard) run() {
 			//fmt.Printf("no error: '%s'\n", s )
 			var status ArduinoBoardStatus
 			var input int
-			n, err := fmt.Scanf(s, "%02X|%02X|%02X\n", &status.SerialNumber, input, &status.RelayState)
+			status.Inputs = make(map[int]int, 8)
+			n, err := fmt.Sscanf(s, "%02X|%02X|%02X", &status.SerialNumber, &input, &status.RelayState)
+			//fmt.Printf("n = %d, err = %v\n", n, err )
 			if nil == err && 3 == n {
 				for i := 0; i < 8; i++ {
-					status.Inputs[i] = 1 & (input >> i)
+					status.Inputs[i] = int(1 & (uint(input) >> uint(i)))
+					//fmt.Printf( "Inputs[%d] = %d\n", i, status.Inputs[i])
 				}
 				//fmt.Printf( "Decoding is ok\n")
 				if nil != a.Update {
@@ -144,8 +147,10 @@ func (a *ArduinoIoBoard) read() (rv string, err error) {
 				continue
 			}
 
-			rv += string(b[:n])
-			i += n
+			if newline != b[0] {
+				rv += string(b[:n])
+			}
+			i++
 		}
 	}
 

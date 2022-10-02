@@ -172,6 +172,11 @@ func (l *Logic) Fan(until time.Time) {
 	l.wholeHouseFan.OnUntil(until)
 }
 
+func (l *Logic) HeatUpstairs(until time.Time) {
+	l.heaterLoopPump.NeededUntil("upstairs", until)
+	l.upstairsHeatPump.OnUntil(until)
+}
+
 func (l *Logic) HeatDownstairs(until time.Time) {
 	l.heaterLoopPump.NeededUntil("downstairs", until)
 	l.downstairsHeatPump.OnUntil(until)
@@ -245,6 +250,7 @@ func (l *Logic) downstairsThermostat() {
 
 			if present < target {
 				l.HeatDownstairs(time.Now().Add(time.Minute * 3))
+				//l.HeatUpstairs(time.Now().Add(time.Minute * 3))
 			}
 		}
 	}

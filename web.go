@@ -52,14 +52,19 @@ func (wh *webHandler) handleControl(w http.ResponseWriter, r *http.Request) {
 	}
 	heat_goal := r.URL.Query().Get("heat_goal_state")
 	if "run" == heat_goal {
-		heat_duration, err := time.ParseDuration(r.URL.Query().Get("heat_duration"))
-		fmt.Printf("Duration: %v\n", heat_duration)
+		heat_down_duration, err := time.ParseDuration(r.URL.Query().Get("heat_down_duration"))
 		if nil == err {
-			wh.logic.HeatDownstairs(time.Now().Add(heat_duration))
+			fmt.Printf("Duration: %v\n", heat_down_duration)
+			wh.logic.HeatDownstairs(time.Now().Add(heat_down_duration))
+		}
+		heat_up_duration, err := time.ParseDuration(r.URL.Query().Get("heat_up_duration"))
+		if nil == err {
+			fmt.Printf("Duration: %v\n", heat_up_duration)
+			wh.logic.HeatUpstairs(time.Now().Add(heat_up_duration))
 		}
 	}
 	if "maintain" == heat_goal {
-		if goal, err := strconv.ParseFloat(r.URL.Query().Get("heat_downstairs_temperature"), 64); nil == err {
+		if goal, err := strconv.ParseFloat(r.URL.Query().Get("heat_target"), 64); nil == err {
 			wh.logic.SetDownstairsTarget(goal)
 		}
 	}

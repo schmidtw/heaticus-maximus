@@ -23,12 +23,12 @@ void setup() {
   SetRelayState(0);
 
   /* Setup the inputs. */
-  pinMode(7, INPUT_PULLUP);
-  pinMode(6, INPUT_PULLUP);
-  pinMode(5, INPUT_PULLUP);
-  pinMode(4, INPUT_PULLUP);
-  pinMode(3, INPUT_PULLUP);
-  pinMode(2, INPUT_PULLUP);
+  pinMode(7, INPUT);
+  pinMode(6, INPUT);
+  pinMode(5, INPUT);
+  pinMode(4, INPUT);
+  pinMode(3, INPUT);
+  pinMode(2, INPUT);
 
 
   /* Start the serial port */

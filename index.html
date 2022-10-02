@@ -44,7 +44,16 @@
 	<br/>
 <form action="/control" >
     Run the downstairs heat for a specific period of time:<br/>
-    <input type="text" name="heat_duration"/> (example: 30s, 3h, 2h30m)
+    <input type="text" name="heat_down_duration"/> (example: 30s, 3h, 2h30m)
+    <input type="hidden" name="heat_goal_state" value="run"/>
+</form>
+	<br/>
+	<br/>
+	<br/>
+	<br/>
+<form action="/control" >
+    Run the upstairs heat for a specific period of time:<br/>
+    <input type="text" name="heat_up_duration"/> (example: 30s, 3h, 2h30m)
     <input type="hidden" name="heat_goal_state" value="run"/>
 </form>
 	<br/>
