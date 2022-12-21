@@ -1,0 +1,32 @@
+---
+i2c:
+  file: "/dev/i2c-1"
+  input-address:  0x23
+  output-address: 0x20
+shared:
+  inputs:
+    # use 9-16 so the LED blink & use the number printed on the board.
+    cold_water:  9
+    hot_water:   10
+    heater_loop: 11
+  outputs:
+    # use the relay number printed on the board
+    heater_loop_pump_relay:        0
+    recirculating_loop_pump_relay: 1
+    whole_house_fan_relay:         5
+
+outdoors:
+    temp_sensor: ""
+
+floor:
+  downstairs:
+    main_temp_sensor: "28.84c5c4331401.5c"
+    pump_relay: 2 # use the relay number printed on the board
+  upstairs:
+    main_temp_sensor: ""
+    pump_relay: 3 # use the relay number printed on the board
+
+other_temp_sensors:
+  "above_curved_room": ""
+  "near_curved_room_angled_vent": ""
+  "above_upstairs_bath_angled_roof": ""
