@@ -1,0 +1,171 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+		<meta charset="utf-8">
+		<title>Semantic UI Sandbox</title>
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.5.0/semantic.min.css">
+		<style>
+			.large.text {
+   				font-size: 2rem;
+			}
+		</style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.5.0/semantic.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="ui container">
+<div class="ui one column grid">
+	<div class="column">
+		<div class="ui raised segment">
+			<a class="ui huge red ribbon label">Preheat Hot Water</a>
+			<br/>
+			<br/>
+			<div class="ui center aligned container">
+				<span class="large text">Heating until 11:22pm</span>
+					<div class="ui red icon button" type="submit">
+						<i class="x icon"></i>
+					</div>
+			</div>
+			<br/>
+			<br/>
+			<div class="ui center aligned container">
+				<div class="ui huge red buttons">
+					<button class="ui button">
+						1min
+					</button>
+					<div class="or"></div>
+					<button class="ui button">
+						5min
+					</button>
+				</div>
+			</div>
+		</div>
+		<div class="column">
+			<div class="ui raised segment">
+				<a class="ui huge blue ribbon label">Whole House Fan</a>
+				<br/>
+				<br/>
+				<div class="ui center aligned container">
+						<span class="large text">Fan running until 11:22pm</span>
+						<div class="ui red icon button">
+							<i class="x icon"></i>
+						</div>
+				</div>
+				<br/>
+				<br/>
+				<div class="ui center aligned container">
+						<span class="large text">Fan will run from 5:32am until 7:22am</span>
+						<div class="ui red icon button">
+							<i class="x icon"></i>
+						</div>
+				</div>
+				<br/>
+				<br/>
+				<div class="ui center aligned container">
+					<div class="ui huge left action input"/>
+					<button class="ui huge blue button">Run for</button>
+					<input type="text" placeholder="Time duration...">
+					<select class="ui compact selection dropdown">
+							<option value="now">from now.</option>
+							<option selected="" value="dawn">before dawn.</option>
+					</select>
+				</div>
+			</div>
+		</div>
+		<div class="column">
+			<div class="ui raised segment">
+				<a class="ui huge violet ribbon label">Heat Set Points</a>
+<div>
+  <canvas id="myChart"></canvas>
+</div>
+				<br/>
+				<br/>
+<script>
+  const ctx = document.getElementById('myChart');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ['12pm', '', '', '12:15pm', '','','','','','','','','','','1pm'],
+      datasets: [
+      {
+        label: '1st °F',
+        data: [69,69.4,70,70.4,68,69,69.4,70,70.4,68,69,69.4,70,70.4,68,69,69.4,70,70.4,68],
+        color: '#018556',
+        borderColor: '#018556',
+        pointRadius: 0,
+      },
+      {
+        label: 'Setpoint °F',
+        data: [69,69,69,69,69,69,69,70,70,70,70,70,70,70,70,70,70,70,70,70],
+        color: '#12e56e',
+        borderColor: '#12e56e',
+        pointRadius: 0,
+      },
+      {
+        label: '2nd °F',
+        data: [70.4,68,69,69.4,70,70.4,68,69,69.4,70,70.4,68,69,69.4,70,70.4,69,69.4,70,68],
+        color: '#0ccca6',
+        borderColor: '#0ccca6',
+        pointRadius: 0,
+      },
+      {
+        label: 'Outdoors °F',
+        data: [54.4,58,60.4,65,69,69.4,70,70.4,68,69,69.4,70,70.4,69,69.4,70,68,70.4,68,69],
+        color: '#718556',
+        borderColor: '#718556',
+        pointRadius: 0,
+      }
+      ]
+    }
+  });
+</script>
+
+				<table class="ui celled table">
+					<thead>
+						<tr>
+							<th class="large text">Location</th>
+							<th class="large text">Current Temp</th>
+							<th class="large text">Heat to Temp</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td class="large text">Upstairs</td>
+							<td class="large text">74.5°F</td>
+							<td class="large text">70.3°F</td>
+						</tr>
+						<tr>
+							<td class="large text">Downstairs</td>
+							<td class="large text">72.5°F</td>
+							<td class="large text">70.3°F</td>
+						</tr>
+					</tbody>
+				</table>
+				<br/>
+				<br/>
+				<div class="ui center aligned container">
+					<div class="ui huge left action input"/>
+					<button class="ui huge violet button">
+						Set Upstairs to
+					</button>
+					<input type="text" placeholder="Degrees Fahrenheit">
+				</div>
+				<br/>
+				<br/>
+				<div class="ui center aligned container">
+					<div class="ui huge left action input"/>
+					<button class="ui huge violet button">
+						Set Downstairs to
+					</button>
+					<input type="text" placeholder="Degrees Fahrenheit">
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+</body>
+</html>
+
