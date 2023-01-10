@@ -1,4 +1,10 @@
 ---
+servers:
+  metrics:
+    address: ":9999"
+  ui:
+    address: ":8443"
+
 i2c:
   file: "/dev/i2c-1"
   input-address:  0x23

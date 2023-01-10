@@ -22,3 +22,17 @@ _testmain.go
 *.exe
 *.test
 *.prof
+
+# Ignore downloaded assets
+views/assets/.cache
+views/assets/site
+
+# Don't include any css or js files by accident.
+*.js
+*.css
+
+# Ignore the binary
+heaticus-maximus
+
+# Ignore swap files from vi
+*.sw*

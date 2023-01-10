@@ -1,198 +1,188 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"time"
+	"os"
 
+	"github.com/alecthomas/kong"
+	"github.com/goschtalt/casemapper"
+	"github.com/goschtalt/goschtalt"
+	_ "github.com/goschtalt/yaml-decoder"
+	_ "github.com/goschtalt/yaml-encoder"
+	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/rs/zerolog/log"
-	"github.com/xmidt-org/arrange/arrangetls"
-	"github.com/xmidt-org/httpaux"
+	"github.com/schmidtw/heaticus-maximus/httpserver"
+	"github.com/schmidtw/heaticus-maximus/views"
+	"github.com/xmidt-org/sallust"
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-func main() {
-	fx.New(
-		/*
-			fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
-				return &fxevent.ZapLogger{Logger: log}
-			}),
-		*/
+const (
+	applicationName = "heaticus-maximus"
+)
+
+var (
+	commit  = "undefined"
+	version = "undefined"
+	date    = "undefined"
+	builtBy = "undefined"
+)
+
+type CLI struct {
+	Debug bool     `optional:"" help:"Run in debug mode."`
+	Show  bool     `optional:"" short:"s" help:"Show the configuration and exit."`
+	Files []string `optional:"" short:"f" name:"file" help:"Specific configuration files."`
+	Dirs  []string `optional:"" short:"d" name:"dir" help:"Specific configuration directories."`
+}
+
+func heaticus(args []string) (exitCode int) {
+	app := fx.New(
+		fx.WithLogger(func(log *zap.Logger) fxevent.Logger {
+			return &fxevent.ZapLogger{Logger: log}
+		}),
 		fx.Provide(
-			NewHTTPServer,
+			// Handle the CLI processing and return the processed input.
+			func() *CLI {
+				var cli CLI
+				_ = kong.Parse(&cli,
+					kong.Name(applicationName),
+					kong.Description("A house heater controller.\n"+
+						fmt.Sprintf("\tVersion:  %s\n", version)+
+						fmt.Sprintf("\tDate:     %s\n", date)+
+						fmt.Sprintf("\tCommit:   %s\n", commit)+
+						fmt.Sprintf("\tBuilt By: %s\n", builtBy),
+					),
+					kong.UsageOnError(),
+				)
+				return &cli
+			},
+
+			// Collect and process the configuration files and env vars and
+			// produce a configuration object.
+			func(cli *CLI) (*goschtalt.Config, error) {
+				return goschtalt.New(
+					goschtalt.AutoCompile(),
+					goschtalt.ExpandEnv(),
+					goschtalt.DefaultMarshalOptions(
+						goschtalt.IncludeOrigins(),
+						goschtalt.FormatAs("yml"),
+					),
+					goschtalt.DefaultUnmarshalOptions(
+						casemapper.ConfigStoredAs("two_words"),
+						goschtalt.DecodeHook(
+							mapstructure.StringToTimeDurationHookFunc(),
+						),
+					),
+					goschtalt.AddJumbled(os.DirFS("/"), os.DirFS("."),
+						append(cli.Files, cli.Dirs...)...),
+				)
+			},
+
+			// Create the logger and configure it based on if the program is in
+			// debug mode or normal mode.
+			goschtalt.UnmarshalFn[sallust.Config]("logger", goschtalt.Optional()),
+			func(cli *CLI, cfg sallust.Config) (*zap.Logger, error) {
+				if cli.Debug {
+					cfg.Level = "DEBUG"
+					cfg.Development = true
+					cfg.Encoding = "console"
+					cfg.EncoderConfig = sallust.EncoderConfig{
+						TimeKey:        "T",
+						LevelKey:       "L",
+						NameKey:        "N",
+						CallerKey:      "C",
+						FunctionKey:    zapcore.OmitKey,
+						MessageKey:     "M",
+						StacktraceKey:  "S",
+						LineEnding:     zapcore.DefaultLineEnding,
+						EncodeLevel:    "capitalColor",
+						EncodeTime:     "RFC3339",
+						EncodeDuration: "string",
+						EncodeCaller:   "short",
+					}
+					cfg.OutputPaths = []string{"stderr"}
+					cfg.ErrorOutputPaths = []string{"stderr"}
+				}
+				return cfg.Build()
+			},
+
+			// Define the metrics endpoint based on it's configuration.
 			fx.Annotate(
-				NewServeMux,
-				fx.ParamTags(`group:"routes"`),
+				goschtalt.UnmarshalFn[httpserver.Config]("servers.metrics"),
+				fx.ResultTags(`name:"metrics.config"`),
 			),
-			AsRoute(NewHelloHandler),
-			zap.NewExample,
+			fx.Annotate(
+				promhttp.Handler,
+				fx.ResultTags(`name:"metrics.handler"`),
+			),
+			fx.Annotate(
+				httpserver.New,
+				fx.ParamTags(`name:""`, `name:"metrics.handler"`, `name:"metrics.config"`),
+				fx.ResultTags(`name:"metrics.server"`),
+			),
+
+			// Define the ui endpoint based on it's configuration.
+			fx.Annotate(
+				goschtalt.UnmarshalFn[httpserver.Config]("servers.ui"),
+				fx.ResultTags(`name:"ui.config"`),
+			),
+			fx.Annotate(
+				views.Handler,
+				fx.ResultTags(`name:"ui.handler"`),
+			),
+			fx.Annotate(
+				httpserver.New,
+				fx.ParamTags(`name:""`, `name:"ui.handler"`, `name:"ui.config"`),
+				fx.ResultTags(`name:"ui.server"`),
+			),
 		),
-		fx.Invoke(func(*http.Server) {}),
-	).Run()
-}
+		fx.Invoke(
+			// Require the metrics server to start.
+			fx.Annotate(
+				func(*http.Server) {},
+				fx.ParamTags(`name:"metrics.server"`),
+			),
 
-type MetricsConfig struct {
-	// ReadTimeout corresponds to http.Server.Addr
-	Addr string `validate:"empty=false"`
+			// Require the ui server to start.
+			fx.Annotate(
+				func(*http.Server) {},
+				fx.ParamTags(`name:"ui.server"`),
+			),
 
-	// Path represents the url path where to locate the metrics listener.
-	Path string
+			// Handle the -s/--show option where the configuration is shown,
+			// then the program is exited.
+			func(cli *CLI, cfg *goschtalt.Config) {
+				if cli.Show {
+					fmt.Fprintln(os.Stdout, cfg.Explain())
 
-	// ReadTimeout corresponds to http.Server.ReadTimeout
-	ReadTimeout time.Duration
-
-	// ReadHeaderTimeout corresponds to http.Server.ReadHeaderTimeout
-	ReadHeaderTimeout time.Duration
-
-	// WriteTime corresponds to http.Server.WriteTimeout
-	WriteTimeout time.Duration
-
-	// IdleTimeout corresponds to http.Server.IdleTimeout
-	IdleTimeout time.Duration
-
-	// MaxHeaderBytes corresponds to http.Server.MaxHeaderBytes
-	MaxHeaderBytes int
-
-	// KeepAlive corresponds to net.ListenConfig.KeepAlive.  This value is
-	// only used for listeners created via Listen.
-	KeepAlive time.Duration
-
-	// Header supplies HTTP headers to emit on every response from this server
-	Headers http.Header
-
-	// TLS is the optional unmarshaled TLS configuration.  If set, the resulting
-	// server will use HTTPS.
-	TLS *arrangetls.Config
-}
-
-func (mc MetricsConfig) New() (server *http.Server, err error) {
-	path := "/"
-	if len(mc.Path) > 0 {
-		path = mc.Path
-	}
-
-	// This bit converts the headers into the httpaux.Header list then decorates
-	// the outgoing headers via a chained http.Handler
-	headers := httpaux.NewHeader(mc.Headers)
-	handler := serveraux.Header(headers.SetTo)(promhttp.Handler())
-
-	mux := http.NewServeMux()
-	mux.Handle(path, handler)
-
-	server := http.Server{
-		Addr:              mc.Address,
-		Handler:           mux,
-		ReadTimeout:       mc.ReadTimeout,
-		ReadHeaderTimeout: mc.ReadHeaderTimeout,
-		WriteTimeout:      mc.WriteTimeout,
-		IdleTimeout:       mc.IdleTimeout,
-		MaxHeaderBytes:    mc.MaxHeaderBytes,
-	}
-
-	server.TLSConfig, err = mc.TLS.New()
-
-	return
-}
-
-func NewMetricsServer(lc fx.Lifecycle) *http.Server {
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			ln, err := net.Listen("tcp", srv.Addr)
-			if err != nil {
-				return err
-			}
-			log.Info("Starting HTTP server", zap.String("addr", srv.Addr))
-			go srv.Serve(ln)
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			log.Info("Stopping HTTP server", zap.String("addr", srv.Addr))
-			return srv.Shutdown(ctx)
-		},
-	})
-	return srv
-}
-
-func NewHTTPServer(lc fx.Lifecycle, mux *http.ServeMux, log *zap.Logger) *http.Server {
-	srv := &http.Server{Addr: ":8080", Handler: mux}
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			ln, err := net.Listen("tcp", srv.Addr)
-			if err != nil {
-				return err
-			}
-			log.Info("Starting HTTP server", zap.String("addr", srv.Addr))
-			go srv.Serve(ln)
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			log.Info("Stopping HTTP server", zap.String("addr", srv.Addr))
-			return srv.Shutdown(ctx)
-		},
-	})
-	return srv
-}
-
-// NewServeMux builds a ServeMux that will route requests
-// to the given route.
-func NewServeMux(routes []Route) *http.ServeMux {
-	mux := http.NewServeMux()
-	for _, route := range routes {
-		mux.Handle(route.Pattern(), route)
-	}
-	return mux
-}
-
-// Route is an http.Handler that knows the mux pattern
-// under which it will be registered.
-type Route interface {
-	http.Handler
-
-	// Pattern reports the path at which this is registered.
-	Pattern() string
-}
-
-// HelloHandler is an HTTP handler that
-// prints a greeting to the user.
-type HelloHandler struct {
-	log *zap.Logger
-}
-
-// NewHelloHandler builds a new HelloHandler.
-func NewHelloHandler(log *zap.Logger) *HelloHandler {
-	return &HelloHandler{log: log}
-}
-
-func (*HelloHandler) Pattern() string {
-	return "/hello"
-}
-
-func (h *HelloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		h.log.Error("Failed to read request", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	if _, err := fmt.Fprintf(w, "Hello, %s\n", body); err != nil {
-		h.log.Error("Failed to write response", zap.Error(err))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-}
-
-// AsRoute annotates the given constructor to state that
-// it provides a route to the "routes" group.
-func AsRoute(f any) any {
-	return fx.Annotate(
-		f,
-		fx.As(new(Route)),
-		fx.ResultTags(`group:"routes"`),
+					out, err := cfg.Marshal()
+					if err != nil {
+						fmt.Fprintln(os.Stderr, err)
+					} else {
+						fmt.Fprintln(os.Stdout, "---\n"+string(out))
+					}
+					// Exit so extra errors aren't output.
+					os.Exit(0)
+				}
+			},
+		),
 	)
+
+	switch err := app.Err(); {
+	case err == nil:
+		app.Run()
+	default:
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+
+	return 0
+}
+
+func main() {
+	os.Exit(heaticus(os.Args))
 }
